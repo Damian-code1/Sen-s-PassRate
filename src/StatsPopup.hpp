@@ -4,13 +4,11 @@
 #include <Geode/ui/Popup.hpp>
 
 namespace senrate {
-
 enum class Tab { Overview = 0, Parts, Runs, Starts, Deaths, Tips, Count };
 
 class StatsPopup : public geode::Popup {
 public:
-    // preferredStart < 0 picks the start position with the most runs;
-    // tab / window default to the last ones the player used
+
     static StatsPopup* create(GJGameLevel* level, int preferredStart, std::optional<Tab> tab, std::optional<Window> window);
     static void open(GJGameLevel* level, int preferredStart,
         std::optional<Tab> tab = std::nullopt, std::optional<Window> window = std::nullopt);

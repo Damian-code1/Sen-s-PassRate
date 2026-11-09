@@ -38,10 +38,8 @@ namespace {
         Notification::create(text, icon, 2.5f)->show();
     }
 
-    // Noclip hits closer than this (in game seconds) are the same hazard
     constexpr double CONTACT_GRACE = 0.2;
 
-    // Game time in seconds, used to tell apart separate noclip hits
     double g_gameClock = 0.0;
 
     struct Totals {
@@ -50,7 +48,6 @@ namespace {
         int streak = 0;
     };
 
-    // Counted all-time runs that began at `start`
     Totals totalsFrom(GJGameLevel* level, int start) {
         Totals t;
         for (auto const& r : selectRuns(Manager::get().level(level), Window::AllTime, Settings::get())) {
@@ -66,10 +63,6 @@ namespace {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Run tracking
-// ---------------------------------------------------------------------------
-
 class $modify(SRGameLayer, GJBaseGameLayer) {
     void update(float dt) {
         if (dt > 0.f && dt < 1.f) g_gameClock += dt;
@@ -79,19 +72,18 @@ class $modify(SRGameLayer, GJBaseGameLayer) {
 
 class $modify(SRPlayLayer, PlayLayer) {
     struct Fields {
-        int origin = -1;            // where the attempt began (-1 = not tracked)
-        int segStart = -1;          // where the current run began
-        bool active = false;        // a run is being tracked right now
-        bool continuation = false;  // the current run began after a noclip hit
-        bool noclipHit = false;     // noclip saved the player this attempt
-        double lastHitClock = -1e9; // game time of the last noclip hit
-        std::vector<Run> attempt;   // runs recorded during this attempt
-        // only tell the player once per level visit
+        int origin = -1;
+        int segStart = -1;
+        bool active = false;
+        bool continuation = false;
+        bool noclipHit = false;
+        double lastHitClock = -1e9;
+        std::vector<Run> attempt;
+
         bool noclipNotified = false;
     };
 
     static void onModify(auto& self) {
-        // run before noclip hacks so we can tell when a hit didn't kill the player
         (void)self.setHookPriority("PlayLayer::destroyPlayer", Priority::First);
     }
 
@@ -113,12 +105,11 @@ class $modify(SRPlayLayer, PlayLayer) {
         runState().currentStart = f->origin;
     }
 
-    // Ends the current run at `end` and records it; returns whether it counted
     bool finishRun(int end, bool noclip) {
         auto f = m_fields.self();
         if (!f->active) return false;
         f->active = false;
-        // e.g. switched to practice mode in the middle of the run
+
         if (!this->shouldTrack()) return false;
 
         Run run;
@@ -139,7 +130,7 @@ class $modify(SRPlayLayer, PlayLayer) {
         if (object == m_anticheatSpike || wasDead) return;
 
         auto f = m_fields.self();
-        if (f->origin < 0) return; // this attempt isn't tracked
+        if (f->origin < 0) return;
         int percent = std::clamp(this->getCurrentPercentInt(), 0, 99);
 
         if (m_playerDied) {
@@ -147,14 +138,12 @@ class $modify(SRPlayLayer, PlayLayer) {
             return;
         }
 
-        // The hit didn't kill the player: another mod's noclip swallowed it
         double now = g_gameClock;
         bool sameContact = now - f->lastHitClock <= CONTACT_GRACE;
         f->lastHitClock = now;
         auto mode = Settings::get().noclip;
 
         if (sameContact) {
-            // still touching the same hazard: the next run begins once it's over
             if (f->active && f->continuation) f->segStart = std::max(f->segStart, percent);
             return;
         }
@@ -190,9 +179,9 @@ class $modify(SRPlayLayer, PlayLayer) {
                 this->finishRun(percent, true);
                 break;
             case NoclipMode::CountAll:
-                // the run ends where it would have without noclip...
+
                 this->finishRun(percent, true);
-                // ...and a new one starts right here
+
                 if (this->shouldTrack()) {
                     f->segStart = percent;
                     f->continuation = true;
@@ -240,10 +229,6 @@ class $modify(AppDelegate) {
     }
 };
 
-// ---------------------------------------------------------------------------
-// Pause menu
-// ---------------------------------------------------------------------------
-
 class $modify(SRPauseLayer, PauseLayer) {
     void customSetup() {
         PauseLayer::customSetup();
@@ -258,10 +243,6 @@ class $modify(SRPauseLayer, PauseLayer) {
         if (auto pl = PlayLayer::get()) StatsPopup::open(pl->m_level, runState().currentStart);
     }
 };
-
-// ---------------------------------------------------------------------------
-// Level pages
-// ---------------------------------------------------------------------------
 
 class $modify(SRLevelInfoLayer, LevelInfoLayer) {
     bool init(GJGameLevel* level, bool challenge) {
@@ -295,15 +276,11 @@ class $modify(SREditLevelLayer, EditLevelLayer) {
     }
 };
 
-// ---------------------------------------------------------------------------
-// Level complete screen
-// ---------------------------------------------------------------------------
-
 class $modify(SREndLevelLayer, EndLevelLayer) {
     void customSetup() {
         EndLevelLayer::customSetup();
         if (!setting("end-screen") || !m_playLayer) return;
-        if (runState().lastOrigin < 0) return; // the attempt wasn't tracked (e.g. practice)
+        if (runState().lastOrigin < 0) return;
 
         bool panel = this->addRunsPanel();
         auto text = this->headline(!panel);
@@ -353,7 +330,6 @@ class $modify(SREndLevelLayer, EndLevelLayer) {
         return "";
     }
 
-    // One-line summary at the bottom of the screen
     void addHeadline(std::string const& text) {
         auto win = CCDirector::get()->getWinSize();
         auto node = CCNode::create();
@@ -388,7 +364,6 @@ class $modify(SREndLevelLayer, EndLevelLayer) {
         menu->addChild(btn);
     }
 
-    // The runs of this attempt and this session, beside the end screen panel
     bool addRunsPanel() {
         auto& rs = runState();
         auto win = CCDirector::get()->getWinSize();
@@ -396,7 +371,6 @@ class $modify(SREndLevelLayer, EndLevelLayer) {
         auto groups = groupRuns(sessionRuns);
         if (groups.empty() && rs.lastAttempt.empty()) return false;
 
-        // Find the big background panel of the end screen
         CCRect panel(win.width / 2 - 190.f, 25.f, 380.f, win.height - 50.f);
         float bestArea = 0.f;
         if (auto children = m_mainLayer->getChildren()) {
@@ -414,7 +388,6 @@ class $modify(SREndLevelLayer, EndLevelLayer) {
             }
         }
 
-        // Pick the side away from the end screen's side buttons
         float leftSpace = panel.getMinX();
         float rightSpace = win.width - panel.getMaxX();
         bool right = rightSpace >= leftSpace;

@@ -11,7 +11,6 @@
 using namespace geode::prelude;
 
 namespace senrate {
-
 namespace {
     constexpr float WIDTH = 460.f;
     constexpr float HEIGHT = 300.f;
@@ -69,7 +68,6 @@ namespace {
         }
     }
 
-    // Small text for a rate that may not have data
     std::string rateText(int passed, int entered) {
         return entered > 0 ? pct(float(passed) / float(entered), 0) : "-";
     }
@@ -121,7 +119,6 @@ bool StatsPopup::init(GJGameLevel* level, int preferredStart, std::optional<Tab>
 
     collectStarts(preferredStart);
 
-    // --- start selector ---------------------------------------------------
     auto selector = menuIn(m_mainLayer, { WIDTH, HEIGHT });
 
     auto prevSpr = CCSprite::createWithSpriteFrameName("GJ_arrow_03_001.png");
@@ -142,7 +139,6 @@ bool StatsPopup::init(GJGameLevel* level, int preferredStart, std::optional<Tab>
     m_summaryLabel = label("", "chatFont.fnt", .6f, { 110.f, HEIGHT - 74.f });
     m_mainLayer->addChild(m_summaryLabel, 2);
 
-    // --- content panel ----------------------------------------------------
     auto panel = NineSlice::create("square02_001.png");
     panel->setContentSize({ PANEL_W, PANEL_H });
     panel->setAnchorPoint({ 0, 0 });
@@ -155,7 +151,6 @@ bool StatsPopup::init(GJGameLevel* level, int preferredStart, std::optional<Tab>
     m_content->setPosition({ PANEL_X, PANEL_Y });
     m_mainLayer->addChild(m_content, 3);
 
-    // --- footer -----------------------------------------------------------
     auto credits = label("SenRate by Sen", "goldFont.fnt", .5f, { WIDTH / 2 + 10.f, 17.f });
     m_mainLayer->addChild(credits);
     auto version = label(mod->getVersion().toVString(), "chatFont.fnt", .45f, { WIDTH / 2 + 66.f, 14.f }, { 0.f, .5f });
@@ -164,7 +159,6 @@ bool StatsPopup::init(GJGameLevel* level, int preferredStart, std::optional<Tab>
 
     auto footer = menuIn(m_mainLayer, { WIDTH, HEIGHT });
 
-    // gray X: this session / red X: the whole history
     auto makeX = [&](CircleBaseColor color, SEL_MenuHandler callback, float x, std::string const& text) {
         auto spr = CircleButtonSprite::createWithSprite("senrate_x.png"_spr, .9f, color, CircleBaseSize::Tiny);
         spr->setScale(22.f / std::max(1.f, spr->getContentSize().width));
@@ -221,7 +215,6 @@ void StatsPopup::refreshHeader() {
     m_startLabel->setScale(.5f);
     limitWidth(m_startLabel, 130.f);
 
-    // rebuild the toggles so the selected ones are highlighted
     if (auto old = m_mainLayer->getChildByID("senrate-toggles")) old->removeFromParent();
     auto menu = menuIn(m_mainLayer, { WIDTH, HEIGHT });
     menu->setID("senrate-toggles");
@@ -283,10 +276,6 @@ void StatsPopup::refresh() {
     handleTouchPriority(this);
 }
 
-// ---------------------------------------------------------------------------
-// Overview
-// ---------------------------------------------------------------------------
-
 void StatsPopup::buildOverview(Analysis const& a) {
     struct Tile { std::string value; std::string caption; ccColor3B color; };
     std::vector<Tile> tiles = {
@@ -313,14 +302,12 @@ void StatsPopup::buildOverview(Analysis const& a) {
         m_content->addChild(caption);
     }
 
-    // Consistency grade
     float gradeRate = a.estimateComplete ? a.estimatedRate : a.passRate;
     auto grade = label(gradeFor(gradeRate), "bigFont.fnt", 1.5f, { PANEL_W - 55.f, topY - 13.f });
     grade->setColor(rateColor(gradeRate * 2.f));
     m_content->addChild(grade);
     m_content->addChild(label(tr("Consistency", "Consistencia"), "goldFont.fnt", .5f, { PANEL_W - 55.f, topY - 48.f }));
 
-    // Pass rate per part
     float chartX = 12.f, chartY = 14.f, chartW = PANEL_W - 24.f, chartH = 36.f;
     auto chartTitle = label(
         fmt::format(fmt::runtime(tr("Pass rate per part ({}%)", "Pass rate por parte ({}%)")), Settings::get().partSize),
@@ -361,10 +348,6 @@ void StatsPopup::buildOverview(Analysis const& a) {
     }
     m_content->addChild(verdict);
 }
-
-// ---------------------------------------------------------------------------
-// Parts
-// ---------------------------------------------------------------------------
 
 void StatsPopup::buildParts(Analysis const& a) {
     constexpr float ROW_H = 20.f;
@@ -447,10 +430,6 @@ void StatsPopup::buildParts(Analysis const& a) {
     scroll->scrollToTop();
 }
 
-// ---------------------------------------------------------------------------
-// Runs
-// ---------------------------------------------------------------------------
-
 void StatsPopup::buildRuns(std::vector<Run> const& runs) {
     constexpr float ROW_H = 20.f;
     float listH = PANEL_H - 24.f;
@@ -495,7 +474,6 @@ void StatsPopup::buildRuns(std::vector<Run> const& runs) {
         bool completed = g.end >= COMPLETE;
         ccColor3B color = completed ? GREEN : g.normal == 0 ? NOCLIP_COLOR : ccColor3B{ 255, 175, 90 };
 
-        // where the run happened in the level (0-100%)
         float barX = 10.f, barW = 120.f, barH = 7.f;
         row->addChild(rect({ 0, 0, 0 }, 110, barX, ROW_H / 2 - barH / 2, barW, barH));
         float x0 = barX + barW * g.start / 100.f;
@@ -517,10 +495,6 @@ void StatsPopup::buildRuns(std::vector<Run> const& runs) {
     }
     scroll->scrollToTop();
 }
-
-// ---------------------------------------------------------------------------
-// Starts
-// ---------------------------------------------------------------------------
 
 void StatsPopup::buildStarts(std::vector<Run> const& runs) {
     constexpr float ROW_H = 24.f;
@@ -572,10 +546,6 @@ void StatsPopup::buildStarts(std::vector<Run> const& runs) {
     scroll->scrollToTop();
 }
 
-// ---------------------------------------------------------------------------
-// Deaths histogram
-// ---------------------------------------------------------------------------
-
 void StatsPopup::buildDeaths(Analysis const& a) {
     float chartX = 14.f, chartY = 20.f, chartW = PANEL_W - 28.f, chartH = PANEL_H - 66.f;
 
@@ -613,10 +583,6 @@ void StatsPopup::buildDeaths(Analysis const& a) {
     m_content->addChild(maxLbl);
 }
 
-// ---------------------------------------------------------------------------
-// Tips
-// ---------------------------------------------------------------------------
-
 void StatsPopup::buildTips() {
     auto text = senrate::buildTips(Manager::get().level(m_level), currentStart(), m_window, Settings::get());
     auto area = MDTextArea::create(text, { PANEL_W - 10.f, PANEL_H - 8.f });
@@ -625,10 +591,6 @@ void StatsPopup::buildTips() {
     area->setPosition({ PANEL_W / 2, PANEL_H / 2 });
     m_content->addChild(area);
 }
-
-// ---------------------------------------------------------------------------
-// Callbacks
-// ---------------------------------------------------------------------------
 
 void StatsPopup::onPrevStart(CCObject*) {
     if (m_starts.empty()) return;

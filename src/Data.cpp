@@ -10,17 +10,10 @@
 using namespace geode::prelude;
 
 namespace senrate {
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 std::string tr(char const* en, char const* es) {
-    // read every call so changing the setting applies immediately
     bool spanish = Mod::get()->getSettingValue<std::string>("language") != "English";
     if (!spanish) return en;
 
-    // GD's bitmap fonts don't have accented characters
     static std::pair<char const*, char const*> const replacements[] = {
         { "á", "a" }, { "é", "e" }, { "í", "i" }, { "ó", "o" }, { "ú", "u" },
         { "Á", "A" }, { "É", "E" }, { "Í", "I" }, { "Ó", "O" }, { "Ú", "U" },
@@ -57,7 +50,7 @@ std::string gradeFor(float rate) {
 
 ccColor3B rateColor(float r) {
     r = std::clamp(r, 0.f, 1.f);
-    // red -> yellow -> green
+
     if (r < 0.5f) {
         float t = r / 0.5f;
         return { 255, static_cast<GLubyte>(70 + 150 * t), 60 };
@@ -89,10 +82,6 @@ RunState& runState() {
     return state;
 }
 
-// ---------------------------------------------------------------------------
-// Selecting & grouping runs
-// ---------------------------------------------------------------------------
-
 static bool counts(Run const& r, Settings const& s) {
     if (!r.noclip()) return true;
     switch (s.noclip) {
@@ -105,7 +94,6 @@ static bool counts(Run const& r, Settings const& s) {
 std::vector<Run> selectRuns(LevelStats const& level, Window window, Settings const& s) {
     std::vector<Run> out;
     if (window == Window::Recent) {
-        // the latest N runs of every start position
         std::map<int, int> taken;
         for (auto it = level.runs.rbegin(); it != level.runs.rend(); ++it) {
             if (!counts(*it, s)) continue;
@@ -142,7 +130,7 @@ std::vector<RunGroup> groupRuns(std::vector<Run> const& runs, std::optional<int>
     std::vector<RunGroup> out;
     out.reserve(groups.size());
     for (auto const& [_, g] : groups) out.push_back(g);
-    // furthest runs first, then the ones that began earlier
+
     std::sort(out.begin(), out.end(), [](RunGroup const& x, RunGroup const& y) {
         if (x.end != y.end) return x.end > y.end;
         return x.start < y.start;
@@ -150,22 +138,16 @@ std::vector<RunGroup> groupRuns(std::vector<Run> const& runs, std::optional<int>
     return out;
 }
 
-// ---------------------------------------------------------------------------
-// Analysis
-// ---------------------------------------------------------------------------
-
 namespace {
-    using Ends = std::map<int, int>;     // end percent -> count
-    using Dataset = std::map<int, Ends>; // start percent -> ends
+    using Ends = std::map<int, int>;
+    using Dataset = std::map<int, Ends>;
 
-    // Pseudo-runs added to every rate so a lucky/unlucky handful of runs
-    // doesn't decide the verdict on its own
     constexpr float PRIOR_WEIGHT = 2.f;
-    // Runs needed before a practice / long-run rate is trusted
+
     constexpr int MIN_CONTEXT = 3;
-    // A part is a choke when long runs pass it this much less than practice
+
     constexpr float CHOKE_GAP = 0.2f;
-    // Below this you fail the part more than you'd like even in practice
+
     constexpr float WEAK_RATE = 0.6f;
 
     int reached(Ends const& ends, int percent) {
@@ -190,22 +172,19 @@ Analysis analyze(std::vector<Run> const& runs, int start, Settings const& s) {
     Analysis a;
     a.start = start;
     int const partSize = std::max(1, s.partSize);
-    // Runs that began at most this far before a part count as practicing it
+
     int const freshRange = std::max(10, partSize * 2);
 
     Dataset data;
     for (auto const& r : runs) {
         int key = r.start;
         if (r.continuation()) {
-            // A noclip run that began right after a hit starts in the middle of
-            // the obstacle that hit you, so it only counts from the next percent
             key = r.start + 1;
             if (key > 99 || (!r.completed() && r.end < key)) continue;
         }
         data[key][r.end]++;
     }
 
-    // --- Runs from exactly this start --------------------------------------
     if (auto it = data.find(start); it != data.end()) {
         long long sum = 0;
         for (auto const& [end, count] : it->second) {
@@ -228,14 +207,13 @@ Analysis analyze(std::vector<Run> const& runs, int start, Settings const& s) {
     }
     a.currentStreak = streak;
 
-    // --- Parts, aligned to multiples of partSize ---------------------------
     for (int from = start; from < COMPLETE;) {
         int to = std::min(COMPLETE, (from / partSize + 1) * partSize);
         PartStats part;
         part.from = from;
         part.to = to;
         for (auto const& [st, ends] : data) {
-            if (st > from) break; // runs that began later never entered this part
+            if (st > from) break;
             int entered = reached(ends, from);
             if (entered == 0) continue;
             int passed = to >= COMPLETE ? completionsOf(ends) : reached(ends, to);
@@ -257,7 +235,6 @@ Analysis analyze(std::vector<Run> const& runs, int start, Settings const& s) {
         from = to;
     }
 
-    // --- Skill / pressure estimates ----------------------------------------
     long long totalPassed = 0, totalEntered = 0;
     for (auto const& p : a.parts) {
         totalPassed += p.passed;
@@ -268,7 +245,6 @@ Analysis analyze(std::vector<Run> const& runs, int start, Settings const& s) {
         return (float(passed) + PRIOR_WEIGHT * prior) / (float(entered) + PRIOR_WEIGHT);
     };
 
-    // Pass rate every part needs for a 25% chance of a full run from `start`
     size_t partCount = std::max<size_t>(1, a.parts.size());
     a.partTarget = std::clamp(std::pow(0.25f, 1.f / float(partCount)), 0.6f, 0.95f);
 
@@ -286,9 +262,6 @@ Analysis analyze(std::vector<Run> const& runs, int start, Settings const& s) {
         }
         estimate *= p.rate();
 
-        // Skill = how well you do the part when you're actually playing it.
-        // Long runs can only make it look worse (nerves), never better, so
-        // the best of practice-only and overall data is your real level.
         p.skill = shrink(p.passed, p.entered);
         if (p.freshEntered >= MIN_CONTEXT) p.skill = std::max(p.skill, shrink(p.freshPassed, p.freshEntered));
         if (p.deepEntered >= MIN_CONTEXT) p.pressure = shrink(p.deepPassed, p.deepEntered);
@@ -319,7 +292,6 @@ Analysis analyze(std::vector<Run> const& runs, int start, Settings const& s) {
         a.consistentFrom = a.parts[i].from;
     }
 
-    // Earliest later start pos you already complete consistently (e.g. 87-100 x5)
     for (auto const& [st, ends] : data) {
         if (st <= start) continue;
         int total = totalOf(ends);
@@ -333,10 +305,6 @@ Analysis analyze(std::vector<Run> const& runs, int start, Settings const& s) {
     }
     return a;
 }
-
-// ---------------------------------------------------------------------------
-// Tips
-// ---------------------------------------------------------------------------
 
 static std::string partName(PartStats const& p) {
     return fmt::format("{}-{}%", p.from, p.to);
@@ -362,7 +330,6 @@ std::string buildTips(LevelStats const& level, int start, Window window, Setting
     std::string out;
     auto add = [&](std::string const& line) { out += line + "\n\n"; };
 
-    // --- Summary -----------------------------------------------------------
     add(fmt::format(fmt::runtime(tr("## From {}%", "## Desde {}%")), start));
     if (a.runs > 0) {
         add(fmt::format(fmt::runtime(tr(
@@ -378,7 +345,6 @@ std::string buildTips(LevelStats const& level, int start, Window window, Setting
             static_cast<int>(std::ceil(1.f / a.estimatedRate)), gradeFor(a.estimatedRate)));
     }
 
-    // --- What you already master -------------------------------------------
     if (a.masteredFrom > start) {
         add(fmt::format(fmt::runtime(tr(
             "<cg>You already master {}-100</c>: you completed it {} of {} times ({}). The end isn't your problem.",
@@ -393,7 +359,6 @@ std::string buildTips(LevelStats const& level, int start, Window window, Setting
         )), a.consistentFrom));
     }
 
-    // --- Walls -------------------------------------------------------------
     if (!a.walls.empty()) {
         auto const& w = a.parts[a.walls.front()];
         add(fmt::format(fmt::runtime(tr("### Your worst part: <cr>{}</c>", "### Tu peor parte: <cr>{}</c>")), partName(w)));
@@ -439,7 +404,6 @@ std::string buildTips(LevelStats const& level, int start, Window window, Setting
                  "Ninguna de las partes con suficientes runs es débil."));
     }
 
-    // --- Chokes ------------------------------------------------------------
     if (!a.chokes.empty()) {
         add(tr("### Nerves (choke)", "### Nervios (choke)"));
         std::string list;
@@ -457,7 +421,6 @@ std::string buildTips(LevelStats const& level, int start, Window window, Setting
         ));
     }
 
-    // --- Deadliest percent -------------------------------------------------
     if (!a.deaths.empty()) {
         auto top = std::max_element(a.deaths.begin(), a.deaths.end(), [](auto const& x, auto const& y) { return x.second < y.second; });
         add(fmt::format(fmt::runtime(tr(
@@ -466,7 +429,6 @@ std::string buildTips(LevelStats const& level, int start, Window window, Setting
         )), top->first, top->second, pct(float(top->second) / float(std::max(1, a.runs)))));
     }
 
-    // --- Trend -------------------------------------------------------------
     if (window != Window::Session) {
         std::vector<bool> own;
         for (auto const& r : selectRuns(level, Window::AllTime, s)) {
@@ -498,7 +460,6 @@ std::string buildTips(LevelStats const& level, int start, Window window, Setting
         }
     }
 
-    // --- Missing data ------------------------------------------------------
     std::optional<std::pair<int, int>> missing;
     for (auto const& p : a.parts) {
         bool lacking = p.entered < s.minSamples;
@@ -513,7 +474,6 @@ std::string buildTips(LevelStats const& level, int start, Window window, Setting
         )), missing->first, missing->second));
     }
 
-    // --- Practice plan -----------------------------------------------------
     add(tr("### Practice plan", "### Plan de práctica"));
     if (a.runs >= 10 && a.passRate >= 0.5f) {
         if (start > 0) {
@@ -560,12 +520,7 @@ std::string buildTips(LevelStats const& level, int start, Window window, Setting
     return out;
 }
 
-// ---------------------------------------------------------------------------
-// Manager
-// ---------------------------------------------------------------------------
-
 namespace {
-    // start (7 bits) | end (7 bits) | origin (7 bits) | flags (4 bits)
     int64_t pack(Run const& r) {
         return int64_t(r.start) | (int64_t(r.end) << 7) | (int64_t(r.origin) << 14) | (int64_t(r.flags & 0xF) << 21);
     }
@@ -591,7 +546,6 @@ std::string Manager::keyFor(GJGameLevel* level) {
     if (!level) return "unknown";
     switch (level->m_levelType) {
         case GJLevelType::Editor: {
-            // local levels have no ID: use a sanitised name + a hash of it
             std::string name = level->m_levelName;
             std::string clean;
             for (char c : name) clean += std::isalnum(static_cast<unsigned char>(c)) ? c : '_';
@@ -624,7 +578,6 @@ LevelStats Manager::load(std::string const& key) const {
     auto json = std::move(res).unwrap();
     stats.name = json["name"].asString().unwrapOr("");
 
-    // --- current format: every run, plus run-length encoded session ids ---
     if (json["runs"].isArray()) {
         size_t count = json["runs"].size();
         std::vector<uint32_t> sessions;
@@ -649,7 +602,6 @@ LevelStats Manager::load(std::string const& key) const {
         return stats;
     }
 
-    // --- v1.0 / v1.1 format: totals + capped history per start -------------
     if (json["starts"].isArray()) {
         for (auto const& s : json["starts"]) {
             int start = static_cast<int>(std::clamp<int64_t>(s["s"].asInt().unwrapOr(0), 0, 99));
@@ -679,7 +631,7 @@ LevelStats Manager::load(std::string const& key) const {
                 r.end = static_cast<uint8_t>(std::clamp(end, start, COMPLETE));
                 stats.runs.push_back(r);
             };
-            // runs older than the stored history only existed in the totals
+
             for (auto const& [p, c] : deaths) {
                 for (int k = inHistory[p]; k < c; k++) push(p);
             }
@@ -731,7 +683,6 @@ void Manager::save(std::string const& key) {
     if (it == m_levels.end()) return;
     auto const& stats = it->second;
 
-    // written by hand: much faster than building a JSON tree for thousands of runs
     std::string out;
     out.reserve(96 + stats.runs.size() * 9);
     out += "{\"version\":2,\"name\":";
