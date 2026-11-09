@@ -1,0 +1,110 @@
+{
+	"geode": "5.11.2",
+	"gd": {
+		"win": "2.2081",
+		"android": "2.2081",
+		"mac": "2.2081",
+		"ios": "2.2081"
+	},
+	"id": "sen.senrate",
+	"name": "SenRate",
+	"version": "v1.2.1",
+	"developer": "Sen",
+	"description": "Pass rate & consistency tracker: per-part pass rates, 100%s from every start pos and tips on what to practice.",
+	"tags": ["utility", "interface", "offline"],
+	"resources": {
+		"sprites": [
+			"resources/*.png"
+		]
+	},
+	"settings": {
+		"general-title": {
+			"type": "title",
+			"name": "General"
+		},
+		"language": {
+			"name": "Language / Idioma",
+			"description": "Language used by SenRate's menus.",
+			"type": "string",
+			"default": "Español",
+			"one-of": ["Español", "English"]
+		},
+		"part-size": {
+			"name": "Part Size (%)",
+			"description": "How big each part of the level is when calculating per-part pass rates.",
+			"type": "int",
+			"default": 5,
+			"min": 1,
+			"max": 25,
+			"control": {
+				"slider": true,
+				"slider-step": 1,
+				"arrows": true,
+				"arrow-step": 1
+			}
+		},
+		"recent-window": {
+			"name": "Recent Runs Window",
+			"description": "How many of your latest runs are used for the 'Recent' view and the improvement trend.",
+			"type": "int",
+			"default": 50,
+			"min": 10,
+			"max": 500
+		},
+		"min-samples": {
+			"name": "Minimum Samples for Tips",
+			"description": "A part needs at least this many runs entering it before SenRate gives advice about it.",
+			"type": "int",
+			"default": 5,
+			"min": 1,
+			"max": 100
+		},
+		"tracking-title": {
+			"type": "title",
+			"name": "Tracking"
+		},
+		"track-practice": {
+			"name": "Track Practice Mode",
+			"description": "Also record runs made in practice mode (from the checkpoint you respawn at).",
+			"type": "bool",
+			"default": false
+		},
+		"noclip-mode": {
+			"name": "Noclip Runs",
+			"description": "What to do with attempts where noclip saved you.\n<cy>Count all</c>: every hit ends a run and a new one starts right there, until the end of the level (start at 25%, hits at 27% and 60% = runs 25-27, 27-60 and 60-100).\n<cy>Count until first hit</c>: only the run up to your first hit counts (25-27).\n<cy>Ignore</c>: nothing is recorded.",
+			"type": "string",
+			"default": "Count all",
+			"one-of": ["Count all", "Count until first hit", "Ignore"]
+		},
+		"ui-title": {
+			"type": "title",
+			"name": "Interface"
+		},
+		"pause-button": {
+			"name": "Pause Menu Button",
+			"type": "bool",
+			"default": true
+		},
+		"level-button": {
+			"name": "Level Page Button",
+			"description": "Adds the SenRate button to the level info page (and to local levels).",
+			"type": "bool",
+			"default": true
+		},
+		"end-screen": {
+			"name": "End Screen Summary",
+			"description": "Shows how many times you've made it to 100% from your start pos on the level complete screen.",
+			"type": "bool",
+			"default": true
+		},
+		"completion-toast": {
+			"name": "Completion Notification",
+			"description": "Shows a small notification with your updated pass rate every time you reach 100%.",
+			"type": "bool",
+			"default": true
+		}
+	},
+	"dependencies": {
+		"geode.node-ids": ">=v1.21.0"
+	}
+}
